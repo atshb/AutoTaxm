@@ -71,46 +71,32 @@ class Ont(nn.Module):
 def main():
     # param
     train_rate = 0.8
-    max_epoch  = 300
+    max_epoch  = 50
     batch_size = 1024
 
     h_size = 512
     drop_rate = 0.2
 
     # Loading
-    dataset    = pd.read_pickle('../dataset/wordnet_filtered.pkl')
-    vectorizer = pd.read_pickle('../vectorizer/vectorizer_w2v.pkl')
+    vectorizer    = pd.read_pickle('../vectorizer/vectorizer_w2v.pkl')
+    train_dataset = pd.read_pickle('../dataset/wordnet_train.csv')
+    valid_dataset = pd.read_pickle('../dataset/wordnet_valid.csv')
 
-    # Preprocess of Dataset
-    random.shuffle(dataset)
-
-    n_train = round(len(dataset) * train_rate)
-    n_valid = len(dataset) - n_train
-
-    print('=== About  Dataset ===')
-    print('train  :', n_train)
-    print('valid  :', n_valid)
-    print('totall :', len(dataset))
-
-    train_dataset = OntDataset(dataset[:n_train], vectorizer)
-    valid_dataset = OntDataset(dataset[n_train:], vectorizer)
+    train_dataset = OntDataset(train_dataset, vectorizer)
+    valid_dataset = OntDataset(valid_dataset, vectorizer)
 
     train_loader = data.DataLoader(train_dataset, batch_size=batch_size, shuffle=False)
     valid_loader = data.DataLoader(valid_dataset, batch_size=batch_size, shuffle=False)
 
     # Calculate input size from dataset
-    max_seq_len = max(max(len(a.split('_')), len(b.split('_'))) for a, b, c in dataset)
-    vec_size = vectorizer['example'][0].shape[0]
+    max_seq_len, vec_size = vectorizer['example'][0].shape
     x_size = 2 * max_seq_len * vec_size
-
-    print('=== Detail of Data ===')
-    print('max sequence length :', max_seq_len)
-    print('vec size of a word  :', vec_size)
-    print('vec size of a input :', x_size)
 
     #
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    
     model = Ont(SimpleConcat(), x_size=x_size, h_size=h_size, drop_rate=drop_rate).to(device)
+    
     loss_func = nn.CrossEntropyLoss()
     optimizer = optim.Adam(model.parameters())
 
@@ -119,19 +105,17 @@ def main():
         # Training
         epoch_loss = 0
         model.train()
-        for i, (x, y) in enumerate(train_loader):
+        for x, y in train_loader:
             t = model(x)
             loss = loss_func(t, y)
             epoch_loss += loss.cpu().item()
-            #
+            # 
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
-
             # if (i + 1) % 10 == 0: print(f'{i + 1:>4} : {loss.cpu().item():>6.3}')
 
         # Validation
-
         epoch_accu = 0
         model.eval()
         for x, y in valid_loader:
